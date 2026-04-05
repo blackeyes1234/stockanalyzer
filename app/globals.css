@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+/* Class-based dark mode for Tailwind `dark:` variants (toggle sets `dark` on <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #fafafa;
+  --foreground: #171717;
+}
+
+.dark {
+  --background: #09090b;
+  --foreground: #fafafa;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Visible keyboard focus for native buttons (components can refine with Tailwind). */
+button:focus-visible {
+  outline: 2px solid #71717a;
+  outline-offset: 2px;
+}
+
+.dark button:focus-visible {
+  outline-color: #a1a1aa;
+}
+
+@keyframes stock-detail-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
