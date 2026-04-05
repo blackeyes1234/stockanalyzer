@@ -7,6 +7,7 @@ import {
   type TransitionEvent as ReactTransitionEvent,
 } from "react";
 import type { SearchTickerData } from "@/app/actions/search-ticker";
+import { OhlcDownloadSection } from "./OhlcDownloadSection";
 import { SearchResultCard } from "./SearchResultCard";
 import type { DetailPhase } from "./types";
 
@@ -69,6 +70,11 @@ export const StockDetailWindow = memo(function StockDetailWindow({
       onTransitionEnd={handleTransitionEnd}
     >
       <SearchResultCard data={data} />
+      <OhlcDownloadSection
+        key={data.ticker}
+        symbol={data.ticker}
+        companyName={data.companyName}
+      />
     </div>
   );
 });

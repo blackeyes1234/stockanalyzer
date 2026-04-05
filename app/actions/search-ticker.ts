@@ -1,46 +1,20 @@
 "use server";
 
-import YahooFinance from "yahoo-finance2";
 import type { SearchQuoteYahoo } from "yahoo-finance2/modules/search";
 import {
   SEARCH_QUERY_MAX_LENGTH,
   SEARCH_QUERY_MIN_LENGTH,
 } from "@/lib/search-constraints";
 import { checkSearchRateLimit } from "@/lib/server-rate-limit";
-
-const yahooFinance = new YahooFinance({
-  suppressNotices: ["yahooSurvey"],
-});
+import {
+  withYahooTimeout,
+  YahooRequestTimeoutError,
+  yahooFinance,
+  YAHOO_REQUEST_TIMEOUT_MS,
+} from "@/lib/yahoo-client";
 
 const TICKER_PATTERN = /^[A-Z0-9.^\-]{1,20}$/;
 const PREFERRED_QUOTE_TYPES = new Set(["EQUITY", "ETF"]);
-const REQUEST_TIMEOUT_MS = 15_000;
-
-class RequestTimeoutError extends Error {
-  constructor() {
-    super("Request timed out");
-    this.name = "RequestTimeoutError";
-  }
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(
-      () => reject(new RequestTimeoutError()),
-      ms,
-    );
-    promise.then(
-      (v) => {
-        clearTimeout(t);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(t);
-        reject(e);
-      },
-    );
-  });
-}
 
 export type SearchTickerData = {
   ticker: string;
@@ -103,9 +77,9 @@ function pickSearchQuotes(
 
 async function quoteToResult(symbol: string): Promise<SearchTickerResult> {
   try {
-    const quote = await withTimeout(
+    const quote = await withYahooTimeout(
       yahooFinance.quote(symbol),
-      REQUEST_TIMEOUT_MS,
+      YAHOO_REQUEST_TIMEOUT_MS,
     );
 
     const companyName =
@@ -123,7 +97,7 @@ async function quoteToResult(symbol: string): Promise<SearchTickerResult> {
     };
   } catch (e) {
     console.error("[searchTicker] quote failed", symbol, e);
-    if (e instanceof RequestTimeoutError) {
+    if (e instanceof YahooRequestTimeoutError) {
       return {
         success: false,
         error: "Request timed out. Please try again.",
@@ -151,9 +125,9 @@ export async function suggestTickers(raw: string): Promise<SuggestTickersResult>
   }
 
   try {
-    const results = await withTimeout(
+    const results = await withYahooTimeout(
       yahooFinance.search(trimmed, { quotesCount: 10 }),
-      REQUEST_TIMEOUT_MS,
+      YAHOO_REQUEST_TIMEOUT_MS,
     );
     const picked = pickSearchQuotes(results.quotes);
     const suggestions = picked.slice(0, 10).map(toSuggestion);
@@ -193,9 +167,9 @@ export async function searchTicker(raw: string): Promise<SearchTickerResult> {
   }
 
   try {
-    const results = await withTimeout(
+    const results = await withYahooTimeout(
       yahooFinance.search(trimmed, { quotesCount: 5 }),
-      REQUEST_TIMEOUT_MS,
+      YAHOO_REQUEST_TIMEOUT_MS,
     );
     const picked = pickSearchQuotes(results.quotes);
     const first = picked[0];
@@ -211,7 +185,7 @@ export async function searchTicker(raw: string): Promise<SearchTickerResult> {
     return quoteToResult(first.symbol);
   } catch (e) {
     console.error("[searchTicker] name search failed", e);
-    if (e instanceof RequestTimeoutError) {
+    if (e instanceof YahooRequestTimeoutError) {
       return {
         success: false,
         error: "Request timed out. Please try again.",

@@ -16,6 +16,7 @@ Next.js app to look up **stock tickers** and **company names** via [Yahoo Financ
 - **Toasts** — Sonner for successful adds (errors use on-page alerts, not duplicate error toasts).
 - **Observability (Vercel)** — `@vercel/analytics` and `@vercel/speed-insights` in the root layout (enable in the Vercel project dashboard after deploy).
 - **Resilience** — Request timeouts (15s) on Yahoo calls, basic **per-IP rate limiting** on server actions (in-memory sliding window), structured `console.error` logging on server failures.
+- **Optional: daily OHLC in Supabase** — After a successful search, users can **download full daily OHLC** from **Yahoo Finance** (`yahoo-finance2` `chart` API) into **Supabase** (many tickers supported via `symbols` + `daily_bars`). If the symbol is already marked synced, the UI explains that another download is not needed.
 
 ---
 
@@ -27,7 +28,7 @@ Next.js app to look up **stock tickers** and **company names** via [Yahoo Financ
 | UI | **React 19.2.4**, **TypeScript 5** |
 | Styling | **Tailwind CSS v4** (`@tailwindcss/postcss`), class-based `dark` variant |
 | Compiler | **React Compiler** (`babel-plugin-react-compiler` in Next config) |
-| Data | **yahoo-finance2** ^3.14 |
+| Data | **yahoo-finance2** ^3.14 (quotes, search, daily `chart` OHLC); optional **Supabase** (`@supabase/supabase-js`) |
 | Notifications | **Sonner** |
 | Testing | **Vitest 4**, **Testing Library** (React, user-event, jest-dom), **jsdom** |
 | Lint | **ESLint 9** + `eslint-config-next` |
@@ -36,7 +37,7 @@ Next.js app to look up **stock tickers** and **company names** via [Yahoo Financ
 
 ## Architecture
 
-The UI lives under `app/` and `components/`; shared logic is in `lib/` and `hooks/`. **Server Actions** in `app/actions/search-ticker.ts` call Yahoo; the browser never holds API secrets for Yahoo.
+The UI lives under `app/` and `components/`; shared logic is in `lib/` and `hooks/`. **Server Actions** in `app/actions/search-ticker.ts` call Yahoo; **optional** actions in `app/actions/ingest-ohlc.ts` use Yahoo `chart` + Supabase (service role on the server only). The browser never holds Yahoo or Supabase secrets.
 
 ```mermaid
 flowchart LR
@@ -47,11 +48,16 @@ flowchart LR
   end
   subgraph server [Next.js server]
     SA[search-ticker.ts]
+    OH[ingest-ohlc.ts]
     RL[server-rate-limit]
     SA --> RL
+    OH --> RL
     SA --> Yahoo[Yahoo Finance API]
+    OH --> Yahoo
+    OH --> SB[(Supabase)]
   end
   TS -->|Server Actions| SA
+  TS -->|Server Actions| OH
 ```
 
 **Flow (simplified)**
@@ -59,6 +65,7 @@ flowchart LR
 1. User types → debounced `suggestTickers` for the dropdown.
 2. Submit or pick a suggestion → `searchTicker` → quote (and search when input is not ticker-shaped).
 3. Success updates the detail panel; failures set messages and optional leave animation on the previous card.
+4. Optional: `checkOhlcStatus` / `ingestDailyOhlc` load or skip Yahoo daily history based on `symbols.ohlc_synced_at` and row counts in `daily_bars`.
 
 ---
 
@@ -100,19 +107,31 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Environment variables
 
-**None are required** for local development. Yahoo access uses the `yahoo-finance2` library from the server only.
+**Yahoo (search / quotes):** no env vars required; the server uses `yahoo-finance2` only.
 
-If you add secrets later (e.g. paid data providers), use `.env.local` and document them here; keep `.env*` out of git (already in `.gitignore`).
+**Supabase (optional OHLC storage):** set these in `.env.local` if you want downloads to persist:
+
+| Variable | Purpose |
+|----------|---------|
+| `SUPABASE_URL` or `NEXT_PUBLIC_SUPABASE_URL` | Project API URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server-only; bypasses RLS—never expose to the client) |
+
+Without them, the historical section shows a clear “database not configured” message; search still works.
+
+Create tables by running the SQL in `supabase/migrations/001_symbols_daily_bars.sql` in the Supabase SQL editor (or via the Supabase CLI if you use migrations there).
+
+Keep `.env*` out of git (already in `.gitignore`).
 
 ---
 
 ## Data & external APIs
 
-- **Provider:** Yahoo Finance (via `yahoo-finance2`). Availability, quotas, and response shape can change without notice.
+- **Quotes / search:** Yahoo Finance (via `yahoo-finance2`). Availability, quotas, and response shape can change without notice.
+- **Daily OHLC:** Yahoo Finance via `yahoo-finance2` **`chart`** (`lib/ohlc-provider/yahoo-chart.ts`), using the same Yahoo symbol as search (e.g. `AAPL`, `RY.TO`). Delisted or invalid symbols may return no rows; availability follows Yahoo’s unofficial API behavior.
 - **Limits (code):**
   - Query length: **`SEARCH_QUERY_MIN_LENGTH`** (2) to **`SEARCH_QUERY_MAX_LENGTH`** (100) in `lib/search-constraints.ts` (used by client and server).
-  - **Rate limit:** ~**80 requests per minute per IP** (sliding window) for `searchTicker` / `suggestTickers`; `searchTicker` returns a user-visible error when exceeded; `suggestTickers` returns `{ success: false }`.
-  - **Timeout:** **15 seconds** per Yahoo `quote` / `search` call; timeouts return a dedicated error message.
+  - **Rate limit:** ~**80 requests per minute per IP** (sliding window) for `searchTicker`, `suggestTickers`, `checkOhlcStatus`, and `ingestDailyOhlc` (each action has its own per-IP counter).
+  - **Timeout:** **15 seconds** per Yahoo `quote` / `search` / `chart` call; timeouts return a dedicated error message.
 
 ---
 
@@ -121,6 +140,8 @@ If you add secrets later (e.g. paid data providers), use `.env.local` and docume
 Tests live under `tests/`:
 
 - **`tests/actions/search-ticker.test.ts`** — Server action behavior (mocked Yahoo + `next/headers`).
+- **`tests/actions/ingest-ohlc.test.ts`** — OHLC status and ingest (mocked Supabase + OHLC provider).
+- **`tests/lib/yahoo-chart.test.ts`** — Yahoo `chart` quote → `DailyBar` mapping.
 - **`tests/components/TickerSearch.test.tsx`** — Search UI, debounce, validation, loading state (mocked actions + Sonner).
 
 ```bash
@@ -152,7 +173,8 @@ npm run test:run
 stockanalyzer/
 ├── app/
 │   ├── actions/
-│   │   └── search-ticker.ts      # Server Actions: searchTicker, suggestTickers
+│   │   ├── ingest-ohlc.ts        # checkOhlcStatus, ingestDailyOhlc (Yahoo chart + Supabase)
+│   │   └── search-ticker.ts      # searchTicker, suggestTickers (Yahoo)
 │   ├── globals.css
 │   ├── layout.tsx                # Root layout, fonts, Analytics, Toaster, theme
 │   └── page.tsx                  # Home: TickerSearch
@@ -165,11 +187,16 @@ stockanalyzer/
 │   ├── useStockDetailPanel.ts    # Result card transitions + errors
 │   └── useTickerSuggestions.ts   # Debounced suggestions fetch
 ├── lib/
+│   ├── ohlc-provider/            # Yahoo chart → daily bars
+│   ├── yahoo-client.ts           # Shared YahooFinance instance + request timeout
+│   ├── supabase/                 # Server admin client (service role)
 │   ├── search-constraints.ts     # Shared min/max query length
 │   ├── server-rate-limit.ts      # Per-IP sliding window
 │   ├── theme.ts
 │   ├── useDebouncedValue.ts
 │   └── utils.ts
+├── supabase/
+│   └── migrations/               # SQL for symbols + daily_bars
 ├── tests/
 │   ├── actions/
 │   ├── components/
@@ -189,7 +216,7 @@ stockanalyzer/
 
 **Ideas for later**
 
-- Historical prices / charts, watchlists, export to CSV.
+- Charts and watchlists on top of stored `daily_bars`, export to CSV from the UI.
 - Stronger rate limiting (e.g. Redis/Upstash) for multi-instance deployments.
 - i18n and broader market coverage messaging.
 
@@ -197,6 +224,7 @@ stockanalyzer/
 
 - In-memory rate limits **reset per server instance** (typical serverless caveat).
 - Yahoo data quality and API stability are outside this project’s control.
+- OHLC ingest to Supabase requires a configured Supabase project (tables + env vars).
 - `tests/REGRESSION_SCENARIOS.md` is manual checklist-style documentation, not automated.
 
 ---

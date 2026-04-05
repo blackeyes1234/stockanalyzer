@@ -9,14 +9,21 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockSearchTicker, mockSuggestTickers } = vi.hoisted(() => ({
-  mockSearchTicker: vi.fn(),
-  mockSuggestTickers: vi.fn(),
-}));
+const { mockSearchTicker, mockSuggestTickers, mockCheckOhlcStatus } =
+  vi.hoisted(() => ({
+    mockSearchTicker: vi.fn(),
+    mockSuggestTickers: vi.fn(),
+    mockCheckOhlcStatus: vi.fn(),
+  }));
 
 vi.mock("@/app/actions/search-ticker", () => ({
   searchTicker: mockSearchTicker,
   suggestTickers: mockSuggestTickers,
+}));
+
+vi.mock("@/app/actions/ingest-ohlc", () => ({
+  checkOhlcStatus: mockCheckOhlcStatus,
+  ingestDailyOhlc: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
@@ -40,6 +47,7 @@ describe("TickerSearch", () => {
       success: true,
       data: { ticker: "AAPL", companyName: "Apple Inc." },
     });
+    mockCheckOhlcStatus.mockResolvedValue({ ok: true, status: "missing" });
   });
 
   it("renders search field and button", () => {

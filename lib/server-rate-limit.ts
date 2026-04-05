@@ -31,7 +31,11 @@ async function clientKey(): Promise<string> {
  * Simple per-IP sliding window (best-effort; resets per server instance on serverless).
  */
 export async function checkSearchRateLimit(
-  action: "searchTicker" | "suggestTickers",
+  action:
+    | "searchTicker"
+    | "suggestTickers"
+    | "ingestOhlc"
+    | "checkOhlcStatus",
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ip = await clientKey();
   const key = `${ip}:${action}`;
