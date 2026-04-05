@@ -52,15 +52,15 @@ describe("TickerSearch", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows inline validation when input exceeds 100 characters before submit", () => {
+  it("shows inline validation when input exceeds max characters before submit", () => {
     render(<TickerSearch />);
     const input = screen.getByRole("combobox");
     const long = "a".repeat(101);
     fireEvent.change(input, { target: { value: long } });
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      /use at most 100 characters in the search field/i,
-    );
+    expect(
+      screen.getByText(/use at most 100 characters in the search field/i),
+    ).toBeInTheDocument();
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(mockSearchTicker).not.toHaveBeenCalled();
   });

@@ -5,7 +5,14 @@ import { THEME_STORAGE_KEY } from "@/lib/theme";
 
 function subscribe(onChange: () => void) {
   const el = document.documentElement;
-  const observer = new MutationObserver(onChange);
+  let prevDark = el.classList.contains("dark");
+  const observer = new MutationObserver(() => {
+    const nextDark = el.classList.contains("dark");
+    if (nextDark !== prevDark) {
+      prevDark = nextDark;
+      onChange();
+    }
+  });
   observer.observe(el, { attributes: true, attributeFilter: ["class"] });
   return () => observer.disconnect();
 }

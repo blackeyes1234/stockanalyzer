@@ -2,14 +2,45 @@
 
 import YahooFinance from "yahoo-finance2";
 import type { SearchQuoteYahoo } from "yahoo-finance2/modules/search";
+import {
+  SEARCH_QUERY_MAX_LENGTH,
+  SEARCH_QUERY_MIN_LENGTH,
+} from "@/lib/search-constraints";
+import { checkSearchRateLimit } from "@/lib/server-rate-limit";
 
 const yahooFinance = new YahooFinance({
   suppressNotices: ["yahooSurvey"],
 });
 
 const TICKER_PATTERN = /^[A-Z0-9.^\-]{1,20}$/;
-const QUERY_MAX = 64;
 const PREFERRED_QUOTE_TYPES = new Set(["EQUITY", "ETF"]);
+const REQUEST_TIMEOUT_MS = 15_000;
+
+class RequestTimeoutError extends Error {
+  constructor() {
+    super("Request timed out");
+    this.name = "RequestTimeoutError";
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(
+      () => reject(new RequestTimeoutError()),
+      ms,
+    );
+    promise.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
 
 export type SearchTickerData = {
   ticker: string;
@@ -72,7 +103,10 @@ function pickSearchQuotes(
 
 async function quoteToResult(symbol: string): Promise<SearchTickerResult> {
   try {
-    const quote = await yahooFinance.quote(symbol);
+    const quote = await withTimeout(
+      yahooFinance.quote(symbol),
+      REQUEST_TIMEOUT_MS,
+    );
 
     const companyName =
       quote.longName?.trim() ||
@@ -87,7 +121,14 @@ async function quoteToResult(symbol: string): Promise<SearchTickerResult> {
         companyName,
       },
     };
-  } catch {
+  } catch (e) {
+    console.error("[searchTicker] quote failed", symbol, e);
+    if (e instanceof RequestTimeoutError) {
+      return {
+        success: false,
+        error: "Request timed out. Please try again.",
+      };
+    }
     return {
       success: false,
       error: "Ticker not found or unavailable.",
@@ -96,22 +137,39 @@ async function quoteToResult(symbol: string): Promise<SearchTickerResult> {
 }
 
 export async function suggestTickers(raw: string): Promise<SuggestTickersResult> {
+  const limited = await checkSearchRateLimit("suggestTickers");
+  if (!limited.ok) {
+    return { success: false };
+  }
+
   const trimmed = raw.trim();
-  if (trimmed.length < 2 || trimmed.length > QUERY_MAX) {
+  if (
+    trimmed.length < SEARCH_QUERY_MIN_LENGTH ||
+    trimmed.length > SEARCH_QUERY_MAX_LENGTH
+  ) {
     return { success: true, suggestions: [] };
   }
 
   try {
-    const results = await yahooFinance.search(trimmed, { quotesCount: 10 });
+    const results = await withTimeout(
+      yahooFinance.search(trimmed, { quotesCount: 10 }),
+      REQUEST_TIMEOUT_MS,
+    );
     const picked = pickSearchQuotes(results.quotes);
     const suggestions = picked.slice(0, 10).map(toSuggestion);
     return { success: true, suggestions };
-  } catch {
-    return { success: true, suggestions: [] };
+  } catch (e) {
+    console.error("[suggestTickers] search failed", e);
+    return { success: false };
   }
 }
 
 export async function searchTicker(raw: string): Promise<SearchTickerResult> {
+  const limited = await checkSearchRateLimit("searchTicker");
+  if (!limited.ok) {
+    return { success: false, error: limited.error };
+  }
+
   const trimmed = raw.trim();
 
   if (!trimmed) {
@@ -121,10 +179,10 @@ export async function searchTicker(raw: string): Promise<SearchTickerResult> {
     };
   }
 
-  if (trimmed.length > QUERY_MAX) {
+  if (trimmed.length > SEARCH_QUERY_MAX_LENGTH) {
     return {
       success: false,
-      error: `Use at most ${QUERY_MAX} characters.`,
+      error: `Use at most ${SEARCH_QUERY_MAX_LENGTH} characters.`,
     };
   }
 
@@ -135,7 +193,10 @@ export async function searchTicker(raw: string): Promise<SearchTickerResult> {
   }
 
   try {
-    const results = await yahooFinance.search(trimmed, { quotesCount: 5 });
+    const results = await withTimeout(
+      yahooFinance.search(trimmed, { quotesCount: 5 }),
+      REQUEST_TIMEOUT_MS,
+    );
     const picked = pickSearchQuotes(results.quotes);
     const first = picked[0];
 
@@ -148,10 +209,17 @@ export async function searchTicker(raw: string): Promise<SearchTickerResult> {
     }
 
     return quoteToResult(first.symbol);
-  } catch {
+  } catch (e) {
+    console.error("[searchTicker] name search failed", e);
+    if (e instanceof RequestTimeoutError) {
+      return {
+        success: false,
+        error: "Request timed out. Please try again.",
+      };
+    }
     return {
       success: false,
-      error: "Ticker not found or unavailable.",
+      error: "Something went wrong. Please try again.",
     };
   }
 }

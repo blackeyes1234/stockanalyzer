@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => ({
+    get(name: string) {
+      if (name === "x-forwarded-for") return "127.0.0.1";
+      return null;
+    },
+  })),
+}));
+
 const { mockQuote, mockSearch } = vi.hoisted(() => ({
   mockQuote: vi.fn(),
   mockSearch: vi.fn(),
@@ -17,6 +26,7 @@ import {
   searchTicker,
   suggestTickers,
 } from "@/app/actions/search-ticker";
+import { SEARCH_QUERY_MAX_LENGTH } from "@/lib/search-constraints";
 
 describe("searchTicker", () => {
   beforeEach(() => {
@@ -35,10 +45,10 @@ describe("searchTicker", () => {
   });
 
   it("returns error when input exceeds max length", async () => {
-    const r = await searchTicker("x".repeat(65));
+    const r = await searchTicker("x".repeat(SEARCH_QUERY_MAX_LENGTH + 1));
     expect(r).toEqual({
       success: false,
-      error: "Use at most 64 characters.",
+      error: `Use at most ${SEARCH_QUERY_MAX_LENGTH} characters.`,
     });
     expect(mockQuote).not.toHaveBeenCalled();
   });
@@ -111,14 +121,14 @@ describe("searchTicker", () => {
     expect(mockQuote).not.toHaveBeenCalled();
   });
 
-  it("returns error when name search throws", async () => {
+  it("returns generic error when name search throws", async () => {
     mockSearch.mockRejectedValue(new Error("timeout"));
 
     const r = await searchTicker("Some Company");
 
     expect(r).toEqual({
       success: false,
-      error: "Ticker not found or unavailable.",
+      error: "Something went wrong. Please try again.",
     });
   });
 });
@@ -136,7 +146,7 @@ describe("suggestTickers", () => {
   });
 
   it("returns empty suggestions for over-long query", async () => {
-    const r = await suggestTickers("x".repeat(65));
+    const r = await suggestTickers("x".repeat(SEARCH_QUERY_MAX_LENGTH + 1));
     expect(r).toEqual({ success: true, suggestions: [] });
     expect(mockSearch).not.toHaveBeenCalled();
   });
@@ -166,11 +176,11 @@ describe("suggestTickers", () => {
     }
   });
 
-  it("returns empty list on search failure", async () => {
+  it("returns success false on search failure", async () => {
     mockSearch.mockRejectedValue(new Error("fail"));
 
     const r = await suggestTickers("app");
 
-    expect(r).toEqual({ success: true, suggestions: [] });
+    expect(r).toEqual({ success: false });
   });
 });
