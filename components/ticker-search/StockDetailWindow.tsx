@@ -10,6 +10,7 @@ import {
 import type { SearchTickerData } from "@/app/actions/search-ticker";
 import { OhlcChartPanel } from "./OhlcChartPanel";
 import { OhlcDownloadSection } from "./OhlcDownloadSection";
+import { QqqRsiBacktestPanel } from "./QqqRsiBacktestPanel";
 import { SearchResultCard } from "./SearchResultCard";
 import type { DetailPhase } from "./types";
 
@@ -77,6 +78,13 @@ export const StockDetailWindow = memo(function StockDetailWindow({
         key={`${data.ticker}-${chartRefresh}`}
         symbol={data.ticker}
       />
+      {(data.ticker.toUpperCase() === "QQQ" ||
+        data.ticker.toUpperCase() === "TQQQ") && (
+        <QqqRsiBacktestPanel
+          key={`${data.ticker}-rsi-backtest-${chartRefresh}`}
+          symbol={data.ticker}
+        />
+      )}
       <OhlcDownloadSection
         key={data.ticker}
         symbol={data.ticker}

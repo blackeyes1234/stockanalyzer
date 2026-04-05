@@ -3,6 +3,10 @@
 import { memo, useEffect, useId, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
+  checkGoogleSheetsExportConfigured,
+  exportDailyBarsToGoogleSheet,
+} from "@/app/actions/export-daily-bars-sheet";
+import {
   checkOhlcStatus,
   ingestDailyOhlc,
 } from "@/app/actions/ingest-ohlc";
@@ -27,6 +31,11 @@ export const OhlcDownloadSection = memo(function OhlcDownloadSection({
   const [infoHint, setInfoHint] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [isExportPending, startExportTransition] = useTransition();
+  const [sheetsExportConfigured, setSheetsExportConfigured] = useState<
+    boolean | null
+  >(null);
+  const [exportMessage, setExportMessage] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +68,16 @@ export const OhlcDownloadSection = memo(function OhlcDownloadSection({
     };
   }, [symbol]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void checkGoogleSheetsExportConfigured().then((r) => {
+      if (!cancelled) setSheetsExportConfigured(r.configured);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function handleDownload() {
     setActionMessage("");
     startTransition(async () => {
@@ -79,6 +98,21 @@ export const OhlcDownloadSection = memo(function OhlcDownloadSection({
       setActionMessage(`Saved ${r.rowsInserted.toLocaleString()} daily rows.`);
       toast.success("OHLC data saved to your database");
       onHistoricalDataChanged?.();
+    });
+  }
+
+  function handleExportToGoogleSheet() {
+    setExportMessage("");
+    startExportTransition(async () => {
+      const r = await exportDailyBarsToGoogleSheet(symbol);
+      if (!r.ok) {
+        setExportMessage(r.error);
+        return;
+      }
+      setExportMessage(
+        `Wrote ${r.rowsWritten.toLocaleString()} rows to tab “${r.sheetTitle}”.`,
+      );
+      toast.success("Exported to Google Sheet");
     });
   }
 
@@ -137,7 +171,42 @@ export const OhlcDownloadSection = memo(function OhlcDownloadSection({
             Checking database…
           </span>
         ) : null}
+        {alreadySynced ? (
+          <button
+            type="button"
+            onClick={handleExportToGoogleSheet}
+            disabled={
+              sheetsExportConfigured !== true ||
+              isExportPending ||
+              Boolean(blockingError)
+            }
+            title={
+              sheetsExportConfigured === false
+                ? "Server is missing Google Sheets env vars or spreadsheet ID. See README."
+                : sheetsExportConfigured === null
+                  ? "Checking whether Google Sheets export is configured…"
+                  : `Export ${symbol} daily bars with RSI(14) and SMA(200) to your spreadsheet`
+            }
+            aria-busy={isExportPending}
+            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 shadow-sm transition hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 dark:focus-visible:outline-zinc-500"
+          >
+            {isExportPending
+              ? "Exporting…"
+              : sheetsExportConfigured === null
+                ? "Export to Google Sheet…"
+                : "Export to Google Sheet"}
+          </button>
+        ) : null}
       </div>
+      {exportMessage ? (
+        <p
+          className="mt-2 text-sm text-zinc-700 dark:text-zinc-300"
+          role="status"
+          aria-live="polite"
+        >
+          {exportMessage}
+        </p>
+      ) : null}
       {actionMessage ? (
         <p
           id={actionId}

@@ -1,22 +1,8 @@
 "use server";
 
+import { chartWindowStartDateIso } from "@/lib/chart-window";
 import { checkSearchRateLimit } from "@/lib/server-rate-limit";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-
-/** Rolling calendar window: bars from this date (inclusive) through latest stored bar. */
-const CHART_LOOKBACK_YEARS = 5;
-
-function chartWindowStartDateIso(): string {
-  const now = new Date();
-  const start = new Date(
-    Date.UTC(
-      now.getUTCFullYear() - CHART_LOOKBACK_YEARS,
-      now.getUTCMonth(),
-      now.getUTCDate(),
-    ),
-  );
-  return start.toISOString().slice(0, 10);
-}
 
 export type ChartDailyBar = {
   date: string;

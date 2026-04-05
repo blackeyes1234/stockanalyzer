@@ -18,6 +18,7 @@ Next.js app to look up **stock tickers** and **company names** via [Yahoo Financ
 - **Resilience** — Request timeouts (15s) on Yahoo calls, basic **per-IP rate limiting** on server actions (in-memory sliding window), structured `console.error` logging on server failures.
 - **Optional: daily OHLC in Supabase** — After a successful search, users can **download full daily OHLC** from **Yahoo Finance** (`yahoo-finance2` `chart` API) into **Supabase** (many tickers supported via `symbols` + `daily_bars`). If the symbol is already marked synced, the UI explains that another download is not needed.
 - **Stored-data chart** — When Supabase has at least one daily row for the current symbol in the **last five calendar years**, a **candlestick chart** ([TradingView Lightweight Charts](https://www.tradingview.com/lightweight-charts/), Apache-2.0) appears above the download section; it refetches after a successful ingest.
+- **Optional: Google Sheets export** — After OHLC is stored, you can **export all daily bars** for the current symbol to a **Google Sheet** you own (one worksheet tab per ticker) including **RSI(14)** and **SMA(200)**. Uses a **GCP service account** whose JSON key is **server-only**; you share the target spreadsheet with that account as Editor.
 
 ---
 
@@ -29,7 +30,7 @@ Next.js app to look up **stock tickers** and **company names** via [Yahoo Financ
 | UI | **React 19.2.4**, **TypeScript 5** |
 | Styling | **Tailwind CSS v4** (`@tailwindcss/postcss`), class-based `dark` variant |
 | Compiler | **React Compiler** (`babel-plugin-react-compiler` in Next config) |
-| Data | **yahoo-finance2** ^3.14 (quotes, search, daily `chart` OHLC); optional **Supabase** (`@supabase/supabase-js`) |
+| Data | **yahoo-finance2** ^3.14 (quotes, search, daily `chart` OHLC); optional **Supabase** (`@supabase/supabase-js`); optional **googleapis** (Sheets export) |
 | Charts | **lightweight-charts** ^5 (TradingView; candlesticks from stored bars) |
 | Notifications | **Sonner** |
 | Testing | **Vitest 4**, **Testing Library** (React, user-event, jest-dom), **jsdom** |
@@ -122,6 +123,18 @@ Without them, the historical section shows a clear “database not configured”
 
 Create tables by running the SQL in `supabase/migrations/001_symbols_daily_bars.sql` in the Supabase SQL editor (or via the Supabase CLI if you use migrations there).
 
+**Google Sheets export (optional):** configure these **only on the server** (never expose the service account key to the client):
+
+| Variable | Purpose |
+|----------|---------|
+| `GOOGLE_SHEETS_EXPORT_SPREADSHEET_ID` | Spreadsheet ID from the Google Sheets URL (`https://docs.google.com/spreadsheets/d/<ID>/edit`) |
+| `GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON` | **Or** full service account JSON as a single-line string in env |
+| `GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY_BASE64` | **Or** base64 encoding of that JSON (avoids multiline env issues on some hosts) |
+
+**Setup (high level):** In [Google Cloud Console](https://console.cloud.google.com/), create or pick a project → enable **Google Sheets API** → **IAM & Admin** → **Service accounts** → create a service account → **Keys** → add JSON key → put the key in env as above → open your target Sheet in Drive → **Share** → add the service account’s email (`…@….iam.gserviceaccount.com`) as **Editor**. Rotate the key if it leaks; never commit it to git.
+
+If these variables are unset, the **Export to Google Sheet** button stays disabled with a tooltip pointing here.
+
 Keep `.env*` out of git (already in `.gitignore`).
 
 ---
@@ -132,7 +145,7 @@ Keep `.env*` out of git (already in `.gitignore`).
 - **Daily OHLC:** Yahoo Finance via `yahoo-finance2` **`chart`** (`lib/ohlc-provider/yahoo-chart.ts`), using the same Yahoo symbol as search (e.g. `AAPL`, `RY.TO`). Delisted or invalid symbols may return no rows; availability follows Yahoo’s unofficial API behavior.
 - **Limits (code):**
   - Query length: **`SEARCH_QUERY_MIN_LENGTH`** (2) to **`SEARCH_QUERY_MAX_LENGTH`** (100) in `lib/search-constraints.ts` (used by client and server).
-  - **Rate limit:** ~**80 requests per minute per IP** (sliding window) for `searchTicker`, `suggestTickers`, `checkOhlcStatus`, and `ingestDailyOhlc` (each action has its own per-IP counter).
+  - **Rate limit:** ~**80 requests per minute per IP** (sliding window) for `searchTicker`, `suggestTickers`, `checkOhlcStatus`, `ingestDailyOhlc`, chart/backtest/export actions, etc. (each action has its own per-IP counter).
   - **Timeout:** **15 seconds** per Yahoo `quote` / `search` / `chart` call; timeouts return a dedicated error message.
 
 ---
@@ -145,6 +158,8 @@ Tests live under `tests/`:
 - **`tests/actions/ingest-ohlc.test.ts`** — OHLC status and ingest (mocked Supabase + OHLC provider).
 - **`tests/lib/yahoo-chart.test.ts`** — Yahoo `chart` quote → `DailyBar` mapping.
 - **`tests/actions/daily-bars-chart.test.ts`** — `getStoredDailyBarsForChart` (mocked Supabase).
+- **`tests/export/build-sheet-rows.test.ts`** — Sheet row grid with RSI/SMA columns.
+- **`tests/google-sheets/sheet-title.test.ts`** — Worksheet title sanitization for the Sheets API.
 - **`tests/components/TickerSearch.test.tsx`** — Search UI, debounce, validation, loading state (mocked actions + Sonner).
 
 ```bash
@@ -176,6 +191,7 @@ npm run test:run
 stockanalyzer/
 ├── app/
 │   ├── actions/
+│   │   ├── export-daily-bars-sheet.ts  # Google Sheets export (service account)
 │   │   ├── ingest-ohlc.ts        # checkOhlcStatus, ingestDailyOhlc (Yahoo chart + Supabase)
 │   │   └── search-ticker.ts      # searchTicker, suggestTickers (Yahoo)
 │   ├── globals.css
@@ -190,6 +206,8 @@ stockanalyzer/
 │   ├── useStockDetailPanel.ts    # Result card transitions + errors
 │   └── useTickerSuggestions.ts   # Debounced suggestions fetch
 ├── lib/
+│   ├── export/                   # buildSheetRows (OHLC + indicators for Sheets)
+│   ├── google-sheets/            # Service account auth + Sheets write helpers
 │   ├── ohlc-provider/            # Yahoo chart → daily bars
 │   ├── yahoo-client.ts           # Shared YahooFinance instance + request timeout
 │   ├── supabase/                 # Server admin client (service role)
