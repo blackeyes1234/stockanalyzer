@@ -4,9 +4,11 @@ import {
   memo,
   useEffect,
   useRef,
+  useState,
   type TransitionEvent as ReactTransitionEvent,
 } from "react";
 import type { SearchTickerData } from "@/app/actions/search-ticker";
+import { OhlcChartPanel } from "./OhlcChartPanel";
 import { OhlcDownloadSection } from "./OhlcDownloadSection";
 import { SearchResultCard } from "./SearchResultCard";
 import type { DetailPhase } from "./types";
@@ -27,6 +29,7 @@ export const StockDetailWindow = memo(function StockDetailWindow({
   onLeaveComplete,
 }: StockDetailWindowProps) {
   const leaveSettledRef = useRef(false);
+  const [chartRefresh, setChartRefresh] = useState(0);
 
   const opacityClass =
     phase === "visible" ? "opacity-100" : "opacity-0";
@@ -70,10 +73,17 @@ export const StockDetailWindow = memo(function StockDetailWindow({
       onTransitionEnd={handleTransitionEnd}
     >
       <SearchResultCard data={data} />
+      <OhlcChartPanel
+        key={`${data.ticker}-${chartRefresh}`}
+        symbol={data.ticker}
+      />
       <OhlcDownloadSection
         key={data.ticker}
         symbol={data.ticker}
         companyName={data.companyName}
+        onHistoricalDataChanged={() =>
+          setChartRefresh((n) => n + 1)
+        }
       />
     </div>
   );

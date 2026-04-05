@@ -9,12 +9,17 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockSearchTicker, mockSuggestTickers, mockCheckOhlcStatus } =
-  vi.hoisted(() => ({
-    mockSearchTicker: vi.fn(),
-    mockSuggestTickers: vi.fn(),
-    mockCheckOhlcStatus: vi.fn(),
-  }));
+const {
+  mockSearchTicker,
+  mockSuggestTickers,
+  mockCheckOhlcStatus,
+  mockGetStoredDailyBarsForChart,
+} = vi.hoisted(() => ({
+  mockSearchTicker: vi.fn(),
+  mockSuggestTickers: vi.fn(),
+  mockCheckOhlcStatus: vi.fn(),
+  mockGetStoredDailyBarsForChart: vi.fn(),
+}));
 
 vi.mock("@/app/actions/search-ticker", () => ({
   searchTicker: mockSearchTicker,
@@ -24,6 +29,10 @@ vi.mock("@/app/actions/search-ticker", () => ({
 vi.mock("@/app/actions/ingest-ohlc", () => ({
   checkOhlcStatus: mockCheckOhlcStatus,
   ingestDailyOhlc: vi.fn(),
+}));
+
+vi.mock("@/app/actions/daily-bars-chart", () => ({
+  getStoredDailyBarsForChart: mockGetStoredDailyBarsForChart,
 }));
 
 vi.mock("sonner", () => ({
@@ -48,6 +57,7 @@ describe("TickerSearch", () => {
       data: { ticker: "AAPL", companyName: "Apple Inc." },
     });
     mockCheckOhlcStatus.mockResolvedValue({ ok: true, status: "missing" });
+    mockGetStoredDailyBarsForChart.mockResolvedValue({ bars: [] });
   });
 
   it("renders search field and button", () => {

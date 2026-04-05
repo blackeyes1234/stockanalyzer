@@ -35,7 +35,8 @@ export async function checkSearchRateLimit(
     | "searchTicker"
     | "suggestTickers"
     | "ingestOhlc"
-    | "checkOhlcStatus",
+    | "checkOhlcStatus"
+    | "getChartDailyBars",
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const ip = await clientKey();
   const key = `${ip}:${action}`;

@@ -10,11 +10,14 @@ import {
 type OhlcDownloadSectionProps = {
   symbol: string;
   companyName: string;
+  /** Called after OHLC is confirmed in the database (new save or already synced). */
+  onHistoricalDataChanged?: () => void;
 };
 
 export const OhlcDownloadSection = memo(function OhlcDownloadSection({
   symbol,
   companyName,
+  onHistoricalDataChanged,
 }: OhlcDownloadSectionProps) {
   const hintId = useId();
   const actionId = useId();
@@ -68,12 +71,14 @@ export const OhlcDownloadSection = memo(function OhlcDownloadSection({
         setAlreadySynced(true);
         setInfoHint(null);
         setActionMessage(r.message);
+        onHistoricalDataChanged?.();
         return;
       }
       setAlreadySynced(true);
       setInfoHint(null);
       setActionMessage(`Saved ${r.rowsInserted.toLocaleString()} daily rows.`);
       toast.success("OHLC data saved to your database");
+      onHistoricalDataChanged?.();
     });
   }
 

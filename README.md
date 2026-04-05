@@ -17,6 +17,7 @@ Next.js app to look up **stock tickers** and **company names** via [Yahoo Financ
 - **Observability (Vercel)** — `@vercel/analytics` and `@vercel/speed-insights` in the root layout (enable in the Vercel project dashboard after deploy).
 - **Resilience** — Request timeouts (15s) on Yahoo calls, basic **per-IP rate limiting** on server actions (in-memory sliding window), structured `console.error` logging on server failures.
 - **Optional: daily OHLC in Supabase** — After a successful search, users can **download full daily OHLC** from **Yahoo Finance** (`yahoo-finance2` `chart` API) into **Supabase** (many tickers supported via `symbols` + `daily_bars`). If the symbol is already marked synced, the UI explains that another download is not needed.
+- **Stored-data chart** — When Supabase has at least one daily row for the current symbol in the **last five calendar years**, a **candlestick chart** ([TradingView Lightweight Charts](https://www.tradingview.com/lightweight-charts/), Apache-2.0) appears above the download section; it refetches after a successful ingest.
 
 ---
 
@@ -29,6 +30,7 @@ Next.js app to look up **stock tickers** and **company names** via [Yahoo Financ
 | Styling | **Tailwind CSS v4** (`@tailwindcss/postcss`), class-based `dark` variant |
 | Compiler | **React Compiler** (`babel-plugin-react-compiler` in Next config) |
 | Data | **yahoo-finance2** ^3.14 (quotes, search, daily `chart` OHLC); optional **Supabase** (`@supabase/supabase-js`) |
+| Charts | **lightweight-charts** ^5 (TradingView; candlesticks from stored bars) |
 | Notifications | **Sonner** |
 | Testing | **Vitest 4**, **Testing Library** (React, user-event, jest-dom), **jsdom** |
 | Lint | **ESLint 9** + `eslint-config-next` |
@@ -142,6 +144,7 @@ Tests live under `tests/`:
 - **`tests/actions/search-ticker.test.ts`** — Server action behavior (mocked Yahoo + `next/headers`).
 - **`tests/actions/ingest-ohlc.test.ts`** — OHLC status and ingest (mocked Supabase + OHLC provider).
 - **`tests/lib/yahoo-chart.test.ts`** — Yahoo `chart` quote → `DailyBar` mapping.
+- **`tests/actions/daily-bars-chart.test.ts`** — `getStoredDailyBarsForChart` (mocked Supabase).
 - **`tests/components/TickerSearch.test.tsx`** — Search UI, debounce, validation, loading state (mocked actions + Sonner).
 
 ```bash
@@ -179,7 +182,7 @@ stockanalyzer/
 │   ├── layout.tsx                # Root layout, fonts, Analytics, Toaster, theme
 │   └── page.tsx                  # Home: TickerSearch
 ├── components/
-│   ├── ticker-search/            # Search subcomponents (card, list, alerts, detail window)
+│   ├── ticker-search/            # Search subcomponents, OHLC chart + download, detail window
 │   ├── DocumentThemeSync.tsx
 │   ├── ThemeToggle.tsx
 │   └── TickerSearch.tsx          # Composes hooks + form UI
