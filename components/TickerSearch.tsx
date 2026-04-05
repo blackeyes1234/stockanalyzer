@@ -628,11 +628,11 @@ function TickerSearchInner() {
                 ? "Searching for stock, please wait"
                 : "Submit search for ticker or company"
             }
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-zinc-900 px-6 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 dark:focus-visible:outline-zinc-900"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-green-600 px-6 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-green-700 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-green-600 dark:hover:bg-green-500 dark:focus-visible:outline-green-400"
           >
             {isPending && (
               <span
-                className="size-4 shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white dark:border-zinc-900/30 dark:border-t-zinc-900"
+                className="size-4 shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white"
                 aria-hidden
               />
             )}
