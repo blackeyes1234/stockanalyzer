@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Toaster } from "sonner";
 import { DocumentThemeSync } from "@/components/DocumentThemeSync";
@@ -47,6 +48,7 @@ export default function RootLayout({
           <ThemeToggle />
         </header>
         <div className="flex flex-1 flex-col">{children}</div>
+        <Analytics />
         <SpeedInsights />
         <Toaster richColors position="top-center" />
       </body>
